@@ -1,15 +1,11 @@
-# Telegram Bio Link Mute Bot
+<h2 align="center">
+    ──「 Bio mute 」──
+</h2>
+<h3 align="center">──「 ʀᴇᴘᴏ sᴛᴀᴛs 」──</h3>
+<a href="https://github.com/babaji067/Biolink"><img src="https://github-readme-stats.vercel.app/api/pin/?username=babaji067&repo=biolink&theme=chartreuse-dark"></a>
 
-यह Telegram Bot नए यूज़र्स के बायो या यूज़रनेम में लिंक डिटेक्ट करके उन्हें म्यूट कर देता है।
+<h3 align="center">
+    ─「 ᴅᴇᴩʟᴏʏ ᴏɴ ʜᴇʀᴏᴋᴜ 」─
+</h3>
 
-## Requirements
-
-- Python 3.8+
-- Telethon Library
-- Telegram API ID & API HASH
-- Bot Token (Optional if running userbot)
-
-## Installation
-
-```bash
-pip install -r requirements.txt
+<p align="center"><a href="https://dashboard.
