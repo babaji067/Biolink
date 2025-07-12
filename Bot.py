@@ -1,54 +1,86 @@
-from telegram import Update, ChatPermissions
-from telegram.ext import Updater, CommandHandler, CallbackContext, ChatMemberHandler
+from telegram import Update, ChatPermissions, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ContextTypes, filters
+)
+import os
 import re
 import time
+from dotenv import load_dotenv
 
-# Replace with your bot token
-TOKEN = 'YOUR_BOT_TOKEN_HERE'
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
 
-# Dictionary to track warnings
+# Warning tracker
 warnings = {}
 
-# Regex to detect links
-link_pattern = re.compile(r'(https?://|www\.)')
-
-# Function to check bios when user joins or updates profile
-def check_bio(update: Update, context: CallbackContext):
-    member = update.chat_member.new_chat_member.user
-    chat_id = update.chat_member.chat.id
-    user_id = member.id
-
-    if member.bio and re.search(link_pattern, member.bio):
-        key = f"{chat_id}_{user_id}"
-        warnings[key] = warnings.get(key, 0) + 1
-        
-        if warnings[key] < 4:
-            context.bot.send_message(chat_id=chat_id,
-                text=f"⚠️ @{member.username or member.first_name}, please remove the link from your bio. Warning {warnings[key]}/3.")
-        else:
-            # Mute the user for 2 hours
-            until = int(time.time()) + 2 * 60 * 60
-            context.bot.restrict_chat_member(chat_id, user_id,
-                ChatPermissions(can_send_messages=False), until_date=until)
-            
-            context.bot.send_message(chat_id=chat_id,
-                text=f"🔇 @{member.username or member.first_name} has been muted for 2 hours due to repeated bio link violations.")
-            warnings[key] = 0  # Reset warnings after mute
+# Link detector
+link_pattern = re.compile(r"(https?://|www\.)")
 
 # Start command
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text("✅ Bio Monitor Bot is active.")
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🤖 Bio-Link Monitor Bot is active.")
+
+# Main handler
+async def monitor_bio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    message_id = update.message.message_id
+    user_id = user.id
+    key = f"{chat_id}_{user_id}"
+
+    try:
+        chat_member = await context.bot.get_chat(user_id)
+        bio = chat_member.bio
+
+        if bio and re.search(link_pattern, bio):
+            # Delete the message
+            await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+
+            # Track warning count
+            warnings[key] = warnings.get(key, 0) + 1
+
+            if warnings[key] < 4:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ @{user.username or user.first_name}, please remove the link from your bio! Warning {warnings[key]}/3."
+                )
+            else:
+                # Mute user for 2 hours
+                until = int(time.time()) + 2 * 60 * 60
+                await context.bot.restrict_chat_member(
+                    chat_id,
+                    user_id,
+                    ChatPermissions(can_send_messages=False),
+                    until_date=until
+                )
+
+                # Custom inline button
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("💬 Appeal Unmute", url="https://t.me/YourSupportBot")]
+                ])
+
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🔇 @{user.username or user.first_name} has been muted for 2 hours due to repeated bio link violations.",
+                    reply_markup=keyboard
+                )
+
+                warnings[key] = 0  # Reset after mute
+
+    except Exception as e:
+        print(f"[Error] Could not check bio for user {user_id}: {e}")
 
 # Main function
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(ChatMemberHandler(check_bio, ChatMemberHandler.CHAT_MEMBER))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & filters.ChatType.GROUPS, monitor_bio))
 
-    updater.start_polling()
-    updater.idle()
+    print("🤖 Bot is running...")
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
