@@ -28,11 +28,9 @@ async def monitor_bio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_id = update.message.message_id
     user_id = user.id
     key = f"{chat_id}_{user_id}"
-
-    try:
-        chat_member = await context.bot.get_chat_member(chat_id, user_id)
-bio = chat_member.user.bio
-
+    try 
+    chat_member = await context.bot.get_chat_member(chat_id, user_id)
+    bio = chat_member.user.bio  # <-- this line fixed
         if bio and re.search(link_pattern, bio):
             # Delete the message
             await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
