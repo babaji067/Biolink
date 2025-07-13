@@ -102,7 +102,7 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔓 Unmute Request", url="https://t.me/YourSupportGroup")]
+                    [InlineKeyboardButton("🔓 Unmute Request", url="https://biomutebot")]
                 ])
 
                 await chat.send_message(
