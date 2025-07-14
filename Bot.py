@@ -16,10 +16,11 @@ from telegram.ext import (
 nest_asyncio.apply()
 
 # 🔧 BOT SETTINGS
-BOT_TOKEN = "7592940604:AAE5BKNUFQ7kMqke6dqDfDVzHmkzJqRYWSM"
-OWNER_ID = 6562948749
-UPDATE_CHANNEL = "@biomute_bot"
-ABOUT_URL = "https://t.me/biomute_bot"
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+OWNER_ID = int(os.environ.get("OWNER_ID"))
+UPDATE_CHANNEL = os.environ.get("UPDATE_CHANNEL")
+ABOUT_URL = os.environ.get("ABOUT_URL")
 
 warn_counts = {}
 mute_duration = {}
