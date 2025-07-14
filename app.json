@@ -5,19 +5,19 @@
   "env": {
     "BOT_TOKEN": {
       "description": "Your Telegram Bot Token from BotFather",
-      "required": true
+      "value": "123456789:ABCDEF-YOUR-BOT-TOKEN"
     },
     "OWNER_ID": {
       "description": "Your Telegram user ID (as integer)",
-      "required": true
+      "value": "123456789"
     },
     "UPDATE_CHANNEL": {
       "description": "Update channel username like @YourChannel",
-      "required": false
+      "value": "@YourChannel"
     },
     "ABOUT_URL": {
       "description": "URL to about button (optional)",
-      "required": false
+      "value": "https://t.me/YourBot"
     }
   },
   "buildpacks": [
