@@ -16,12 +16,11 @@ from telegram.ext import (
 nest_asyncio.apply()
 
 # 🔧 BOT SETTINGS
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # <- Add your bot token here
-OWNER_ID = 123456789  # <- Add your Telegram user ID
-UPDATE_CHANNEL = "@YourChannelUsername"  # <- Add your update channel username
-ABOUT_URL = "https://t.me/YourAboutBotPage"  # <- About bot info page
+BOT_TOKEN = "7592940604:AAE5BKNUFQ7kMqke6dqDfDVzHmkzJqRYWSM"
+OWNER_ID = 6562948749
+UPDATE_CHANNEL = "@biomute_bot"
+ABOUT_URL = "https://t.me/biomute_bot"
 
-# ⛔ Warn / Mute system
 warn_counts = {}
 mute_duration = {}
 DEFAULT_MUTE_HOURS = 2
@@ -74,7 +73,7 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         return
 
-    if has_username_or_link_in_bio(bio):
+    if has_username_or_link_in_bio(bio) or re.search(r"(http|www\.|t\.me|@[\w\d_]+)", update.message.text or "", re.IGNORECASE):
         try:
             await update.message.delete()
         except:
@@ -86,7 +85,7 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if count < 4:
             await chat.send_message(
-                f"⚠️ {user.first_name}, links or usernames are not allowed in your bio! Warning {count}/3"
+                f"⚠️ {user.first_name}, links or usernames are not allowed in your bio or message! Warning {count}/3"
             )
         else:
             hours = mute_duration.get(chat_id, DEFAULT_MUTE_HOURS)
@@ -102,11 +101,12 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔓 Unmute Request", url="https://biomutebot")]
+                    [InlineKeyboardButton("🔁 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
+                    [InlineKeyboardButton("🔓 Unmute", url="https://t.me/BioMuteBot")]
                 ])
 
                 await chat.send_message(
-                    f"🔇 {user.first_name} has been muted for {hours} hour(s) after receiving 3 warnings.",
+                    f"⚔️ Bio mute ⚔️\n\n👤 {user.first_name} | 🆔 {user.id}\n\n⛔ Muted for {hours} hour(s).",
                     reply_markup=keyboard
                 )
                 warn_counts[user_id] = 0
@@ -126,7 +126,7 @@ async def set_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         return
 
-if len(context.args) != 1 or not context.args[0].isdigit():
+    if len(context.args) != 1 or not context.args[0].isdigit():
         await update.message.reply_text("❌ Usage: /setmute <hours>\nExample: /setmute 4")
         return
 
@@ -152,18 +152,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Not joined")
     except:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔁 Join Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-            [InlineKeyboardButton("✅ I've Joined", callback_data="refresh_start")]
+            [InlineKeyboardButton("🔗 Join Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")]
         ])
         await update.message.reply_text(
-            "⛔ Please join the update channel first!\nThen click '✅ I've Joined'.",
+            "📛 Please join the update channel to use the bot.",
             reply_markup=keyboard
         )
         return
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔁 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
         [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
+        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
         [InlineKeyboardButton("ℹ️ About Bot", url=ABOUT_URL)]
     ])
 
@@ -172,18 +171,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_photo(
                 chat_id=chat.id,
                 photo=photo,
-                caption="🤖 *Welcome to Bio Mute Bot!*\n\nI automatically mute users who have links or usernames in their bio.\nUse /setmute <hours> to change mute duration.",
+                caption="👋 *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links or usernames in their bios or messages.\n\n⚙️ Use /setmute <hours> to customize mute time.",
                 parse_mode="Markdown",
                 reply_markup=keyboard
             )
     except:
-        await update.message.reply_text("🤖 Welcome! (Image not found)", reply_markup=keyboard)
-
-# Callback for refresh button
-async def refresh_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await start(update, context)
+        await update.message.reply_text(
+            "👋 *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links or usernames in their bios or messages.\n\n⚙️ Use /setmute <hours> to customize mute time.",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
 
 # /help command
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -196,7 +193,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🔹 /status – Check bot status (owner only)  
 🔹 /help – Show this help message
 
-⚠️ The bot automatically mutes users who have links or usernames in their bio.
+⚠️ The bot automatically mutes users who have links or usernames in their bio or messages.
 """, parse_mode="Markdown")
 
 # /status command
@@ -226,7 +223,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open(GROUPS_FILE, "r") as f:
         groups = f.read().splitlines()
 
-for group_id in groups:
+    for group_id in groups:
         try:
             await context.bot.send_message(chat_id=int(group_id), text=text)
             success += 1
@@ -247,7 +244,6 @@ async def main():
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("broadcast", broadcast))
     app.add_handler(MessageHandler(filters.ALL, check_user))
-    app.add_handler(CallbackQueryHandler(refresh_start, pattern="refresh_start"))
 
     await app.initialize()
     await app.start()
