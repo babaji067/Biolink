@@ -1,308 +1,277 @@
-import nest_asyncio
-import asyncio
-import re
 import os
-import sys
-from datetime import datetime, timedelta
-from telegram import (
-    Update, ChatPermissions, InlineKeyboardButton,
-    InlineKeyboardMarkup, InputMediaPhoto
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler,
-    MessageHandler, CallbackQueryHandler,
-    ContextTypes, filters
-)
+import re
+import json
+import time
+import logging
+from dotenv import load_dotenv
+from telegram import *
+from telegram.ext import *
 
-nest_asyncio.apply()
+load_dotenv()
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-OWNER_ID = int(os.environ.get("OWNER_ID"))
-UPDATE_CHANNEL = os.environ.get("UPDATE_CHANNEL")
-ABOUT_URL = os.environ.get("ABOUT_URL")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = int(os.getenv("OWNER_ID"))
+BOT_USERNAME = os.getenv("BOT_USERNAME")
+UPDATE_CHANNEL = os.getenv("UPDATE_CHANNEL")
 
-warn_counts = {}
-mute_duration = {}
-DEFAULT_MUTE_HOURS = 2
-MAX_MUTE_HOURS = 72
-MIN_MUTE_HOURS = 2
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-GROUPS_FILE = "groups.txt"
-USERS_FILE = "users.txt"
+# Storage files
+for file in ["users.txt", "groups.txt", "warns.json"]:
+    if not os.path.exists(file):
+        open(file, "w").close()
+if os.path.getsize("warns.json") == 0:
+    with open("warns.json", "w") as f:
+        f.write("{}")
 
-def save_group_id(group_id):
-    if not os.path.exists(GROUPS_FILE):
-        with open(GROUPS_FILE, "w") as f:
-            f.write(str(group_id) + "\n")
-    else:
-        with open(GROUPS_FILE, "r") as f:
-            ids = f.read().splitlines()
-        if str(group_id) not in ids:
-            with open(GROUPS_FILE, "a") as f:
-                f.write(str(group_id) + "\n")
+MUTE_DURATION = 2  # default in hours
 
-def save_user_id(user_id):
-    if not os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "w") as f:
-            f.write(str(user_id) + "\n")
-    else:
-        with open(USERS_FILE, "r") as f:
-            ids = f.read().splitlines()
-        if str(user_id) not in ids:
-            with open(USERS_FILE, "a") as f:
-                f.write(str(user_id) + "\n")
+def start(update: Update, context: CallbackContext):
+    user = update.effective_user
+    uid = user.id
+    name = user.first_name
 
-def has_username_or_link(text: str) -> bool:
-    if not text:
-        return False
-    return bool(re.search(r"(http|www\.|t\.me)", text, re.IGNORECASE))
+    # Track private user
+    if update.message.chat.type == "private":
+        if str(uid) not in open("users.txt").read():
+            with open("users.txt", "a") as f:
+                f.write(f"{uid}\n")
 
-async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.from_user:
-        return
-
-    user = update.message.from_user
-    chat = update.effective_chat
-    user_id = user.id
-    chat_id = chat.id
-
-    if chat.type in ["group", "supergroup"]:
-        save_group_id(chat_id)
-
-    if re.search(r"(http|www\.|t\.me|@[\w\d_]+)", user.first_name or "", re.IGNORECASE):
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=chat.id,
-                user_id=user_id,
-                permissions=ChatPermissions(can_send_messages=False)
-            )
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-                [InlineKeyboardButton("🔓 Unmute – @" + context.bot.username, url=f"https://t.me/{context.bot.username}")]
-            ])
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=f"⛔ You are permanently muted in *{chat.title}* because your name contains a link or username.",
-                parse_mode="Markdown",
-                reply_markup=keyboard
-            )
-        except Exception as e:
-            print(f"[❌] Failed to permanently mute: {e}")
-        return
-
-    if has_username_or_link(update.message.text or ""):
-        try:
-            await update.message.delete()
-        except:
-            pass
-
-        warn_counts.setdefault(user_id, 0)
-        warn_counts[user_id] += 1
-        count = warn_counts[user_id]
-
-        warn_text = f"⚠️ {user.first_name}, links are not allowed! Warning {count}/3"
-
-        # Send warning to group
-        await update.effective_chat.send_message(warn_text)
-
-        # Send warning to DM
-        try:
-            await context.bot.send_message(chat_id=user_id, text=warn_text)
-        except:
-            pass
-
-        if count >= 4:
-            hours = mute_duration.get(chat_id, DEFAULT_MUTE_HOURS)
-            hours = max(MIN_MUTE_HOURS, min(hours, MAX_MUTE_HOURS))
-            mute_until = datetime.utcnow() + timedelta(hours=hours)
-
-            try:
-                await context.bot.restrict_chat_member(
-                    chat_id=chat.id,
-                    user_id=user_id,
-                    permissions=ChatPermissions(can_send_messages=False),
-                    until_date=mute_until
-                )
-
-keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-                    [InlineKeyboardButton("🔓 Unmute – @" + context.bot.username, url=f"https://t.me/{context.bot.username}")]
-                ])
-
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=(
-                        f"⚔️ *You’ve been muted in {chat.title}*\n\n"
-                        f"👤 Name: {user.first_name}\n🆔 ID: {user.id}\n\n"
-                        f"⛔ Reason: Link in message\n"
-                        f"⏳ Duration: {hours} hour(s)"
-                    ),
-                    parse_mode="Markdown",
-                    reply_markup=keyboard
-                )
-                warn_counts[user_id] = 0
-            except Exception as e:
-                print("Mute failed:", e)
-
-async def set_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("🚫 Only the owner can set mute duration.")
-        return
-
-    chat = update.effective_chat
-    if len(context.args) != 1 or not context.args[0].isdigit():
-        await update.message.reply_text("❌ Usage: /setmute <hours>\nExample: /setmute 4")
-        return
-
-    hours = int(context.args[0])
-    if hours < MIN_MUTE_HOURS or hours > MAX_MUTE_HOURS:
-        await update.message.reply_text(f"⚠️ Mute duration must be between {MIN_MUTE_HOURS}-{MAX_MUTE_HOURS} hours.")
-        return
-
-    mute_duration[chat.id] = hours
-    await update.message.reply_text(f"✅ Mute duration is now set to {hours} hour(s).")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    chat = update.effective_chat
-
-    if chat.type in ["group", "supergroup"]:
-        save_group_id(chat.id)
-    if chat.type == "private":
-        save_user_id(user_id)
-
+    # Check channel join
     try:
-        member = await context.bot.get_chat_member(chat_id=UPDATE_CHANNEL, user_id=user_id)
-        if member.status not in ["member", "administrator", "creator"]:
+        member = context.bot.get_chat_member(f"@{UPDATE_CHANNEL}", uid)
+        if member.status not in ['member', 'administrator', 'creator']:
             raise Exception("Not joined")
     except:
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Join Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")]
-        ])
-        await update.message.reply_text("📛 Please join the update channel to use the bot.", reply_markup=keyboard)
-        return
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Join Channel", url=f"https://t.me/{UPDATE_CHANNEL}")]])
+        return update.message.reply_text("🔒 Please join our update channel to use me.", reply_markup=keyboard)
 
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{context.bot.username}?startgroup=true")],
-        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="show_help")]
+        [InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{BOT_USERNAME}?startgroup=true")],
+        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL}")],
+        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
     ])
+    update.message.reply_text(f"👋 Welcome {name}!\n\nI'm your anti-link bot to mute spammers with links in bio or messages.", reply_markup=keyboard)
 
+def help_button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    text = (
+        "🤖 *Bot Commands:*\n\n"
+        "/start - Start the bot\n"
+        "/help - Show help menu\n"
+        "/setmute <hours> - Set mute duration (owner only)\n"
+        "/status - Show bot status (owner only)\n"
+        "/broadcast -user - Send to users and groups\n"
+        "/broadcast -user -pin - Pin in groups too\n"
+        "/restart - Restart bot (owner only)"
+    )
+    query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+
+def add_group(update: Update, context: CallbackContext):
+    chat = update.effective_chat
+    if str(chat.id) not in open("groups.txt").read():
+        with open("groups.txt", "a") as f:
+            f.write(f"{chat.id}\n")
+            from telegram.ext.filters import Filters
+from telegram.error import BadRequest, Unauthorized
+
+def is_link(text):
+    return bool(re.search(r"(https?://|t\.me/|www\.)", text))
+
+def bio_or_msg_has_link(user, message):
+    bio = user.bio or ""
+    text = message.text or ""
+    return is_link(bio) or is_link(text)
+
+def warn_user(user_id):
+    with open("warns.json", "r") as f:
+        warns = json.load(f)
+    warns[str(user_id)] = warns.get(str(user_id), 0) + 1
+    with open("warns.json", "w") as f:
+        json.dump(warns, f)
+    return warns[str(user_id)]
+
+def reset_warn(user_id):
+    with open("warns.json", "r") as f:
+        warns = json.load(f)
+    warns[str(user_id)] = 0
+    with open("warns.json", "w") as f:
+        json.dump(warns, f)
+
+def mute_user(chat_id, user_id, hours, context):
+    until_date = int(time.time() + hours * 3600)
     try:
-        with open("start.jpg", "rb") as photo:
-            await context.bot.send_photo(
-                chat_id=chat.id,
-                photo=photo,
-                caption="👋 *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages.\n\n⚙️ Use /setmute <hours> to customize mute time.",
-                parse_mode="Markdown",
-                reply_markup=keyboard
-            )
+        context.bot.restrict_chat_member(chat_id, user_id, ChatPermissions(can_send_messages=False), until_date=until_date)
+        return True
     except:
-        await update.message.reply_text(
-            "👋 *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages.\n\n⚙️ Use /setmute <hours> to customize mute time.",
-            parse_mode="Markdown",
+        return False
+
+def send_mute_notice(context, user, reason, group_name):
+    try:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL}")],
+            [InlineKeyboardButton(f"🔓 Unmute – @{BOT_USERNAME}", url=f"https://t.me/{BOT_USERNAME}")]
+        ])
+        context.bot.send_message(
+            chat_id=user.id,
+            text=f"⚔️ *Bio mute*\n👤 {user.first_name} (`{user.id}`)\n⛔ {reason}",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=keyboard
         )
+    except:
+        pass  # user blocked bot
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("""
-🤖 *BioMuteBot Help*
+def message_handler(update: Update, context: CallbackContext):
+    message = update.effective_message
+    user = message.from_user
+    chat = update.effective_chat
+    uid = user.id
+    fname = user.first_name
 
-🔹 /start – Show the bot's welcome menu  
-🔹 /setmute <hours> – Set mute duration (owner only)  
-🔹 /broadcast -user – Broadcast to groups + users  
-🔹 /broadcast -user -pin – Broadcast & pin in groups  
-🔹 /status – Check bot status (owner only)  
-🔹 /restart – Restart the bot (owner only)  
-🔹 /help – Show this help message
-
-⚠️ The bot mutes users who post links or have them in bios/names.
-""", parse_mode="Markdown")
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    g = len(open(GROUPS_FILE).readlines()) if os.path.exists(GROUPS_FILE) else 0
-    u = len(open(USERS_FILE).readlines()) if os.path.exists(USERS_FILE) else 0
-    await update.message.reply_text(f"📊 Groups: {g}\n👤 Users: {u}")
-
-async def restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        return
-    await update.message.reply_text("🔄 Restarting bot...")
-    os.execv(sys.executable, [sys.executable] + sys.argv)
-
-async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
+    # Skip non-group
+    if chat.type != "group" and chat.type != "supergroup":
         return
 
-    pin = "-pin" in context.args
-    is_user = "-user" in context.args
+    # Track group
+    if str(chat.id) not in open("groups.txt").read():
+        with open("groups.txt", "a") as f:
+            f.write(f"{chat.id}\n")
 
-    text = " ".join(arg for arg in context.args if not arg.startswith("-"))
+    # Skip admins
+    member = chat.get_member(uid)
+    if member.status in ["administrator", "creator"]:
+        return
+
+    # Check for link in message or bio
+    bio = user.bio or ""
+    text = message.text or ""
+    if is_link(text) or is_link(bio):
+        message.delete()
+        count = warn_user(uid)
+        if count < 4:
+            context.bot.send_message(chat.id, f"⚠️ Warning {count}/3 to [{fname}](tg://user?id={uid}) for link in bio/message.", parse_mode=ParseMode.MARKDOWN)
+        else:
+            reset_warn(uid)
+            if mute_user(chat.id, uid, MUTE_DURATION, context):
+                reason = f"Muted for {MUTE_DURATION} hours due to repeated link spam."
+                # Group mute notice
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL}")],
+                    [InlineKeyboardButton(f"🔓 Unmute – @{BOT_USERNAME}", url=f"https://t.me/{BOT_USERNAME}")]
+                ])
+                context.bot.send_message(chat.id, f"⚔️ *Bio mute*\n👤 {fname} (`{uid}`)\n⛔ {reason}", parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+                # DM mute notice
+                send_mute_notice(context, user, reason, chat.title)
+    elif "@" in text:
+        pass  # allow username
+
+def join_handler(update: Update, context: CallbackContext):
+    for member in update.message.new_chat_members:
+        uid = member.id
+        fname = member.first_name
+        chat = update.effective_chat
+
+        # If first name contains link/username → mute permanently
+        if is_link(fname) or "@" in fname:
+            mute_user(chat.id, uid, 999999, context)
+            send_mute_notice(context, member, "Permanently muted due to link in name.", chat.title)
+            from telegram.ext import CommandHandler, MessageHandler, Filters, CallbackQueryHandler, ChatMemberHandler
+from telegram.utils.helpers import mention_html
+
+def broadcast(update: Update, context: CallbackContext):
+    user = update.effective_user
+    if user.id != OWNER_ID:
+        return update.message.reply_text("⛔ Only the bot owner can use this command.")
+    
+    args = context.args
+    pin = "-pin" in args
+    to_users = "-user" in args
+    count = 0
     msg = update.message.reply_to_message or update.message
 
-    groups = open(GROUPS_FILE).read().splitlines() if os.path.exists(GROUPS_FILE) else []
-    users = open(USERS_FILE).read().splitlines() if os.path.exists(USERS_FILE) else []
-
-    success_g = success_u = fail_g = fail_u = 0
-
-    async def send(to_id, is_group):
-        nonlocal success_g, success_u, fail_g, fail_u
-        try:
-            if msg.photo:
-                sent = await context.bot.send_photo(chat_id=int(to_id), photo=msg.photo[-1].file_id, caption=msg.caption or text)
-            elif msg.text:
-                sent = await context.bot.send_message(chat_id=int(to_id), text=msg.text or text)
-            else:
-                return
-            if is_group and pin:
-                await context.bot.pin_chat_message(chat_id=int(to_id), message_id=sent.message_id)
-            if is_group:
-                success_g += 1
-            else:
-                success_u += 1
-        except Exception as e:
-            if is_group:
-                fail_g += 1
-            else:
-                fail_u += 1
+    with open("groups.txt") as f: groups = f.read().splitlines()
+    with open("users.txt") as f: users = f.read().splitlines()
 
     for gid in groups:
-        await send(gid, True)
-    if is_user:
+        try:
+            if msg.photo:
+                sent = context.bot.send_photo(chat_id=int(gid), photo=msg.photo[-1].file_id, caption=msg.caption)
+            else:
+                sent = context.bot.send_message(chat_id=int(gid), text=msg.text or msg.caption)
+            if pin:
+                context.bot.pin_chat_message(chat_id=int(gid), message_id=sent.message_id, disable_notification=True)
+            count += 1
+        except:
+            remove_id("groups.txt", gid)
+
+    if to_users:
         for uid in users:
-            await send(uid, False)
+            try:
+                if msg.photo:
+                    context.bot.send_photo(chat_id=int(uid), photo=msg.photo[-1].file_id, caption=msg.caption)
+                else:
+                    context.bot.send_message(chat_id=int(uid), text=msg.text or msg.caption)
+                count += 1
+            except:
+                remove_id("users.txt", uid)
 
-    await update.message.reply_text(
-        f"✅ Broadcast Done!\n"
-        f"Groups: {success_g}✅ | {fail_g}❌\n"
-        f"Users: {success_u}✅ | {fail_u}❌"
-    )
+    update.message.reply_text(f"✅ Broadcast sent to {count} chats.")
 
-async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await help_command(update.callback_query, context)
+def remove_id(filename, id_):
+    lines = open(filename).read().splitlines()
+    if id_ in lines:
+        lines.remove(id_)
+        with open(filename, "w") as f:
+            f.write("\n".join(lines))
 
-# Main runner
-async def main():
-    print("🤖 Bot is starting...")
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+def setmute(update: Update, context: CallbackContext):
+    user = update.effective_user
+    if user.id != OWNER_ID:
+        return update.message.reply_text("⛔ Owner only.")
+    try:
+        global MUTE_DURATION
+        MUTE_DURATION = int(context.args[0])
+        update.message.reply_text(f"✅ Mute duration set to {MUTE_DURATION} hour(s).")
+    except:
+        update.message.reply_text("Usage: /setmute 2")
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setmute", set_mute))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("restart", restart))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(CallbackQueryHandler(help_callback, pattern="show_help"))
-    app.add_handler(MessageHandler(filters.ALL, check_user))
+def status(update: Update, context: CallbackContext):
+    if update.effective_user.id != OWNER_ID:
+        return
+    gcount = len(open("groups.txt").read().splitlines())
+    ucount = len(open("users.txt").read().splitlines())
+    update.message.reply_text(f"📊 Status:\n👥 Groups: {gcount}\n👤 Users: {ucount}\n⏱ Mute Time: {MUTE_DURATION} hour(s)")
 
-    await app.initialize()
-    await app.start()
-    print("✅ Bot is running...")
-    await app.updater.start_polling()
-    await asyncio.Event().wait()
+def restart(update: Update, context: CallbackContext):
+    if update.effective_user.id != OWNER_ID:
+        return
+    update.message.reply_text("♻️ Restarting bot...")
+    os.execl(sys.executable, sys.executable, *sys.argv)
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
+def main():
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    # Commands
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("help", help_button))
+    dp.add_handler(CommandHandler("broadcast", broadcast, filters=Filters.reply))
+    dp.add_handler(CommandHandler("setmute", setmute))
+    dp.add_handler(CommandHandler("status", status))
+    dp.add_handler(CommandHandler("restart", restart))
+
+    # Buttons
+    dp.add_handler(CallbackQueryHandler(help_button, pattern="help"))
+
+    # Handlers
+    dp.add_handler(MessageHandler(Filters.text & Filters.group, message_handler))
+    dp.add_handler(ChatMemberHandler(join_handler, ChatMemberHandler.CHAT_MEMBER))
+
+    # Start
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
