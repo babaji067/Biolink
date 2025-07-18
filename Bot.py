@@ -140,19 +140,25 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if success:
                 warn_counts[key] = 0  # Reset warn count after mute
 
-async def permanently_mute_user(update, context, user):
+async def mute_user(update, context, user):
+    chat_id = update.message.chat.id
+    user_id = user.id
+    hours = mute_duration.get(chat_id, DEFAULT_MUTE_HOURS)
+    until_date = datetime.utcnow() + timedelta(hours=hours)
+
     try:
         await context.bot.restrict_chat_member(
-            chat_id=update.message.chat.id,
-            user_id=user.id,
-            permissions=ChatPermissions(can_send_messages=False)
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=until_date
         )
         await context.bot.send_message(
-            chat_id=user.id,
+            chat_id=user_id,
             text=(
                 f"⚔️ *Bio mute*\n\n"
                 f"👤 Name: {user.first_name}\n🆔 ID: `{user.id}`\n"
-                "⛔ You are permanently muted due to link in your name."
+                f"⛔ You are muted for {hours} hours due to links in bio or messages."
             ),
             parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([
@@ -160,9 +166,9 @@ async def permanently_mute_user(update, context, user):
                 [InlineKeyboardButton("🔓 Unmute", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}")]
             ])
         )
+        return True
     except:
-        pass
-
+        return False
 
 async def send_warning(update, context, user, count):
     display_count = min(count, 3)  # Max warning display 3/3
@@ -340,7 +346,7 @@ def main():
     app.add_handler(CallbackQueryHandler(help_callback, pattern="help"))
 
     # Check name of newly joined members
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_new_member_name))
+    app.add_handler(MessageHandler(filters.StatusUp4date.NEW_CHAT_MEMBERS, check_new_member_name))
 
     # Check regular messages (excluding joins)
     non_join_filter = filters.ALL & ~filters.StatusUpdate.NEW_CHAT_MEMBERS
