@@ -105,34 +105,38 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type == "private":
         save_id(USERS_FILE, update.message.from_user.id)
-    else:
-        save_id(GROUPS_FILE, update.message.chat.id)
+        return
 
-        user = update.message.from_user
-        text = update.message.text or ""
+    save_id(GROUPS_FILE, update.message.chat.id)
+    user = update.message.from_user
+    text = update.message.text or ""
 
-        try:
-            user_chat = await context.bot.get_chat(user.id)
-            user_bio = user_chat.bio or ""
-        except:
-            user_bio = ""
+    try:
+        user_chat = await context.bot.get_chat(user.id)
+        user_bio = user_chat.bio or ""
+    except:
+        user_bio = ""
 
-        has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
-        has_username_in_name = contains_link_or_username(user.first_name)
+    has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
+    has_username_in_name = contains_link_or_username(user.first_name)
 
-        if has_username_in_name:
-            await permanently_mute_user(update, context, user)
-            return
+    # 🔴 Check for name-based permanent mute
+    if has_username_in_name:
+        await permanently_mute_user(update, context, user)
+        return
 
-        if has_link:
-            key = f"{update.message.chat.id}_{user.id}"
-            warn_counts[key] = warn_counts.get(key, 0) + 1
+    # 🟠 Check for link in message or bio
+    if has_link:
+        key = f"{update.message.chat.id}_{user.id}"
+        warn_counts[key] = warn_counts.get(key, 0) + 1
 
-            await update.message.delete()
-            await send_warning(update, context, user, warn_counts[key])
+        await update.message.delete()
+        await send_warning(update, context, user, warn_counts[key])
 
-            if warn_counts[key] >= 4:
-                await mute_user(update, context, user)
+        # ✅ Mute after 4th offense and reset warn count
+        if warn_counts[key] >= 4:
+            await mute_user(update, context, user)
+            warn_counts[key] = 0  # Reset after mute
             return
 
         if has_link:
@@ -357,4 +361,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main() 
