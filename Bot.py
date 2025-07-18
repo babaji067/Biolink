@@ -135,8 +135,9 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ✅ Mute after 4th offense and reset warn count
         if warn_counts[key] >= 4:
-            await mute_user(update, context, user)
-            warn_counts[key] = 0  # Reset after mute
+            success = await mute_user(update, context, user)
+            if success:
+                warn_counts[key] = 0  # Reset only if mute succeeds
             return
 
     warn_counts[key] = count + 1
@@ -173,13 +174,19 @@ async def permanently_mute_user(update, context, user):
 
 
 async def send_warning(update, context, user, count):
-    msg = f"⚠️ {user.first_name} (`{user.id}`), Using links or usernames in your bio or messages is not allowed. Please follow our community policies. Warning {count}/3."
+    display_count = min(count, 3)  # Max warning display 3/3
+    msg = (
+        f"⚠️ {user.first_name} (`{user.id}`), "
+        "Using links or usernames in your bio or messages is not allowed. "
+        f"Please follow our community policies. Warning {display_count}/3."
+    )
+
     await update.message.chat.send_message(msg, parse_mode="Markdown")
 
     try:
         await context.bot.send_message(user.id, msg, parse_mode="Markdown")
     except:
-        remove_id(USERS_FILE, user.id)
+        remove_id(USERS_FILE, user.id) 
 
 
 async def check_new_member_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
