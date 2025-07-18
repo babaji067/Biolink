@@ -110,18 +110,29 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user = update.message.from_user
         text = update.message.text or ""
-        user_bio = ""
+
         try:
-            user_info = await context.bot.get_chat_member(update.message.chat.id, user.id)
-            user_bio = user_info.user.bio or ""
+            user_chat = await context.bot.get_chat(user.id)
+            user_bio = user_chat.bio or ""
         except:
-            pass
+            user_bio = ""
 
         has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
         has_username_in_name = contains_link_or_username(user.first_name)
 
         if has_username_in_name:
             await permanently_mute_user(update, context, user)
+            return
+
+        if has_link:
+            key = f"{update.message.chat.id}_{user.id}"
+            warn_counts[key] = warn_counts.get(key, 0) + 1
+
+            await update.message.delete()
+            await send_warning(update, context, user, warn_counts[key])
+
+            if warn_counts[key] >= 4:
+                await mute_user(update, context, user)
             return
 
         if has_link:
