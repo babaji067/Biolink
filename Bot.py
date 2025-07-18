@@ -346,7 +346,7 @@ def main():
     app.add_handler(CallbackQueryHandler(help_callback, pattern="help"))
 
     # Check name of newly joined members
-    app.add_handler(MessageHandler(filters.StatusUp4date.NEW_CHAT_MEMBERS, check_new_member_name))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_new_member_name))
 
     # Check regular messages (excluding joins)
     non_join_filter = filters.ALL & ~filters.StatusUpdate.NEW_CHAT_MEMBERS
