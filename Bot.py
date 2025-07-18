@@ -120,34 +120,25 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
     has_username_in_name = contains_link_or_username(user.first_name)
 
-    # 🔴 Check for name-based permanent mute
     if has_username_in_name:
         await permanently_mute_user(update, context, user)
         return
 
-    # 🟠 Check for link in message or bio
     if has_link:
         key = f"{update.message.chat.id}_{user.id}"
         warn_counts[key] = warn_counts.get(key, 0) + 1
 
-        await update.message.delete()
+        try:
+            await update.message.delete()
+        except:
+            pass
+
         await send_warning(update, context, user, warn_counts[key])
 
-        # ✅ Mute after 4th offense and reset warn count
         if warn_counts[key] >= 4:
             success = await mute_user(update, context, user)
             if success:
-                warn_counts[key] = 0  # Reset only if mute succeeds
-            return
-
-    warn_counts[key] = count + 1
-    await update.message.delete()
-    await send_warning(update, context, user, warn_counts[key])
-
-    if warn_counts[key] >= 3:
-        await mute_user(update, context, user)
-        warn_counts[key] = 0  # Reset count after mute
-
+                warn_counts[key] = 0  # Reset warn count after mute
 
 async def permanently_mute_user(update, context, user):
     try:
