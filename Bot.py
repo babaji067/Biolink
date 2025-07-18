@@ -186,37 +186,30 @@ async def send_warning(update, context, user, count):
         remove_id(USERS_FILE, user.id)
 
 
-async def mute_user(update, context, user):
-    duration = mute_duration.get(update.message.chat.id, DEFAULT_MUTE_HOURS)
-    until_date = datetime.now() + timedelta(hours=duration)
-
-    try:
-        await context.bot.restrict_chat_member(
-            chat_id=update.message.chat.id,
-            user_id=user.id,
-            permissions=ChatPermissions(can_send_messages=False),
-            until_date=until_date
-        )
-
-        mute_text = (
-            f"⚔️ *Bio mute*\n\n"
-            f"👤 Name: {user.first_name}\n🆔 ID: `{user.id}`\n"
-            f"⛔ Muted for {duration} hours."
-        )
-
-        buttons = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-            [InlineKeyboardButton("🔓 Unmute", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}")]
-        ])
-
-        await update.message.chat.send_message(mute_text, parse_mode="Markdown", reply_markup=buttons)
-
-        try:
-            await context.bot.send_message(user.id, mute_text, parse_mode="Markdown", reply_markup=buttons)
-        except:
-            remove_id(USERS_FILE, user.id)
-    except:
-        pass
+async def check_new_member_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for member in update.message.new_chat_members:
+        if contains_link_or_username(member.first_name):
+            try:
+                await context.bot.restrict_chat_member(
+                    chat_id=update.message.chat.id,
+                    user_id=member.id,
+                    permissions=ChatPermissions(can_send_messages=False)
+                )
+                await context.bot.send_message(
+                    chat_id=member.id,
+                    text=(
+                        f"⚔️ *Bio mute*\n\n"
+                        f"👤 Name: {member.first_name}\n🆔 ID: `{member.id}`\n"
+                        "⛔ You are permanently muted due to link in your name."
+                    ),
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
+                        [InlineKeyboardButton("🔓 Unmute", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}")]
+                    ])
+                )
+            except:
+                pass
 
 
 async def set_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -239,54 +232,83 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     args = context.args
-    text = update.message.text or ""
     is_user = "-user" in args
     should_pin = "-pin" in args
 
     users = []
     groups = []
 
-    if is_user:
-        if os.path.exists(USERS_FILE):
-            with open(USERS_FILE, "r") as f:
-                users = [int(i.strip()) for i in f if i.strip().isdigit()]
+    if is_user and os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r") as f:
+            users = [int(i.strip()) for i in f if i.strip().isdigit()]
 
     if os.path.exists(GROUPS_FILE):
         with open(GROUPS_FILE, "r") as f:
             groups = [int(i.strip()) for i in f if i.strip().isdigit()]
 
-    content = None
-    if update.message.reply_to_message:
-        content = update.message.reply_to_message
+    content = update.message.reply_to_message if update.message.reply_to_message else update.message
+
+    success_groups = 0
+    success_users = 0
+    failed_groups = 0
+    failed_users = 0
+
+    async def send_content(chat_id, is_group=False):
+        nonlocal success_groups, success_users, failed_groups, failed_users
+
+        try:
+            if content.text and not content.caption and not content.photo:
+                msg = await context.bot.send_message(chat_id=chat_id, text=content.text)
+            elif content.photo:
+                msg = await context.bot.send_photo(chat_id=chat_id, photo=content.photo[-1].file_id, caption=content.caption or "")
+            elif content.video:
+                msg = await context.bot.send_video(chat_id=chat_id, video=content.video.file_id, caption=content.caption or "")
+            elif content.voice:
+                msg = await context.bot.send_voice(chat_id=chat_id, voice=content.voice.file_id, caption=content.caption or "")
+            elif content.audio:
+                msg = await context.bot.send_audio(chat_id=chat_id, audio=content.audio.file_id, caption=content.caption or "")
+            elif content.document:
+                msg = await context.bot.send_document(chat_id=chat_id, document=content.document.file_id, caption=content.caption or "")
+            elif content.animation:
+                msg = await context.bot.send_animation(chat_id=chat_id, animation=content.animation.file_id, caption=content.caption or "")
+            elif content.sticker:
+                msg = await context.bot.send_sticker(chat_id=chat_id, sticker=content.sticker.file_id)
+            else:
+                msg = await context.bot.send_message(chat_id=chat_id, text="📝 Empty or unsupported message.")
+            
+            if should_pin and is_group:
+                await context.bot.pin_chat_message(chat_id, msg.message_id)
+
+            if is_group:
+                success_groups += 1
+            else:
+                success_users += 1
+
+        except:
+            if is_group:
+                remove_id(GROUPS_FILE, chat_id)
+                failed_groups += 1
+            else:
+                remove_id(USERS_FILE, chat_id)
+                failed_users += 1
 
     for gid in groups:
-        try:
-            if content and content.photo:
-                await context.bot.send_photo(chat_id=gid, photo=content.photo[-1].file_id, caption=content.caption)
-            elif content and content.text:
-                msg = await context.bot.send_message(chat_id=gid, text=content.text)
-                if should_pin:
-                    await context.bot.pin_chat_message(gid, msg.message_id)
-            elif context.args:
-                msg = await context.bot.send_message(chat_id=gid, text=" ".join(context.args))
-                if should_pin:
-                    await context.bot.pin_chat_message(gid, msg.message_id)
-        except:
-            remove_id(GROUPS_FILE, gid)
+        await send_content(gid, is_group=True)
 
-    for uid in users:
-        try:
-            if content and content.photo:
-                await context.bot.send_photo(chat_id=uid, photo=content.photo[-1].file_id, caption=content.caption)
-            elif content and content.text:
-                await context.bot.send_message(chat_id=uid, text=content.text)
-            elif context.args:
-                await context.bot.send_message(chat_id=uid, text=" ".join(context.args))
-        except:
-            remove_id(USERS_FILE, uid)
+    if is_user:
+        for uid in users:
+            await send_content(uid, is_group=False)
 
-    await update.message.reply_text("✅ Broadcast sent.")
-
+    await update.message.reply_text(
+        f"✅ *Broadcast Report:*\n\n"
+        f"👥 Groups Sent: {success_groups}\n"
+        f"❌ Groups Failed: {failed_groups}\n"
+        f"👤 Users Sent: {success_users}\n"
+        f"❌ Users Failed: {failed_users}",
+        parse_mode="Markdown"
+    )
+                
+               
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.from_user.id != OWNER_ID:
@@ -322,7 +344,13 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(CommandHandler("restart", restart))
     app.add_handler(CallbackQueryHandler(help_callback, pattern="help"))
-    app.add_handler(MessageHandler(filters.ALL, check_user))
+
+    # Check name of newly joined members
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_new_member_name))
+
+    # Check regular messages (excluding joins)
+    non_join_filter = filters.ALL & ~filters.StatusUpdate.NEW_CHAT_MEMBERS
+    app.add_handler(MessageHandler(non_join_filter, check_user))
 
     print("Bot is running...")
     app.run_polling()
