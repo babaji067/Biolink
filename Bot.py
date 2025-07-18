@@ -102,7 +102,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(help_text, parse_mode="Markdown")
 
 
-async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type == "private":
         save_id(USERS_FILE, update.message.from_user.id)
         return
@@ -111,35 +111,34 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text or ""
 
-     # In check_user:
-try:
-    user_chat = await context.bot.get_chat(user.id)
-    user_bio = user_chat.bio or ""
-except:
-    user_bio = ""
-
-has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
-has_username_in_name = contains_link_or_username(user.first_name)
-
-if has_username_in_name:
-    await permanently_mute_user(update, context, user)
-    return
-
-if has_link:
-    key = f"{update.message.chat.id}_{user.id}"
-    warn_counts[key] = warn_counts.get(key, 0) + 1
-
     try:
-        await update.message.delete()
+        user_chat = await context.bot.get_chat(user.id)
+        user_bio = user_chat.bio or ""
     except:
-        pass
+        user_bio = ""
 
-    await send_warning(update, context, user, warn_counts[key])
+    has_link = contains_link_or_username(text) or contains_link_or_username(user_bio)
+    has_username_in_name = contains_link_or_username(user.first_name)
 
-    if warn_counts[key] >= 4:
-        success = await mute_user(update, context, user)
-        if success:
-            warn_counts[key] = 0  # Reset warn count after mute
+    if has_username_in_name:
+        await permanently_mute_user(update, context, user)
+        return
+
+    if has_link:
+        key = f"{update.message.chat.id}_{user.id}"
+        warn_counts[key] = warn_counts.get(key, 0) + 1
+
+        try:
+            await update.message.delete()
+        except:
+            pass
+
+        await send_warning(update, context, user, warn_counts[key])
+
+        if warn_counts[key] >= 4:
+            success = await mute_user(update, context, user)
+            if success:
+                warn_counts[key] = 0  # Reset warn count after mute
 
 async def mute_user(update, context, user):
     chat_id = update.message.chat.id
