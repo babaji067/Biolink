@@ -188,24 +188,27 @@ async def send_warning(update, context, user, count):
 
 async def check_new_member_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for member in update.message.new_chat_members:
-        if contains_link_or_username(member.first_name):
+        # ✅ Only check first name (no bio)
+        if contains_link_or_username(member.first_name) or contains_username(member.first_name):
             try:
                 await context.bot.restrict_chat_member(
                     chat_id=update.message.chat.id,
                     user_id=member.id,
                     permissions=ChatPermissions(can_send_messages=False)
                 )
+
                 await context.bot.send_message(
                     chat_id=member.id,
                     text=(
                         f"⚔️ *Bio mute*\n\n"
-                        f"👤 Name: {member.first_name}\n🆔 ID: `{member.id}`\n"
-                        "⛔ You are permanently muted due to link in your name."
+                        f"👤 Name: {member.first_name}\n"
+                        f"🆔 ID: `{member.id}`\n\n"
+                        f"⛔ You are permanently muted due to link or username in your name."
                     ),
                     parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-                        [InlineKeyboardButton("🔓 Unmute", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}")]
+                        [InlineKeyboardButton(f"🔓 Unmute – {BOT_USERNAME}", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}")]
                     ])
                 )
             except:
