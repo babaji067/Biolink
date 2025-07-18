@@ -139,14 +139,6 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             warn_counts[key] = 0  # Reset after mute
             return
 
-        if has_link:
-    key = f"{update.message.chat.id}_{user.id}"
-    count = warn_counts.get(key, 0)
-
-    if count >= 3:
-        # Already muted, ignore further warnings
-        return
-
     warn_counts[key] = count + 1
     await update.message.delete()
     await send_warning(update, context, user, warn_counts[key])
