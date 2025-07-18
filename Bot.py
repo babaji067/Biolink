@@ -136,14 +136,20 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if has_link:
-            key = f"{update.message.chat.id}_{user.id}"
-            warn_counts[key] = warn_counts.get(key, 0) + 1
+    key = f"{update.message.chat.id}_{user.id}"
+    count = warn_counts.get(key, 0)
 
-            await update.message.delete()
-            await send_warning(update, context, user, warn_counts[key])
+    if count >= 3:
+        # Already muted, ignore further warnings
+        return
 
-            if warn_counts[key] >= 4:
-                await mute_user(update, context, user)
+    warn_counts[key] = count + 1
+    await update.message.delete()
+    await send_warning(update, context, user, warn_counts[key])
+
+    if warn_counts[key] >= 3:
+        await mute_user(update, context, user)
+        warn_counts[key] = 0  # Reset count after mute
 
 
 async def permanently_mute_user(update, context, user):
@@ -171,7 +177,7 @@ async def permanently_mute_user(update, context, user):
 
 
 async def send_warning(update, context, user, count):
-    msg = f"⚠️ {user.first_name} (`{user.id}`), you posted a link. Warning {count}/3."
+    msg = f"⚠️ {user.first_name} (`{user.id}`), Using links or usernames in your bio or messages is not allowed. Please follow our community policies. Warning {count}/3."
     await update.message.chat.send_message(msg, parse_mode="Markdown")
 
     try:
