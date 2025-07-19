@@ -1,3 +1,4 @@
+
 import nest_asyncio
 import asyncio
 import re
@@ -100,8 +101,7 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/restart - Restart bot (Owner only)\n"
     )
     await query.message.reply_text(help_text, parse_mode="Markdown")
-    
- async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type == "private":
         save_id(USERS_FILE, update.message.from_user.id)
         return
