@@ -70,26 +70,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 raise Exception
         except:
             join_button = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Join Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")]
-            ])
-            await update.message.reply_text(
-                f"👋 Hello {user.first_name},\n\nPlease join our update channel to use this bot.",
-                reply_markup=join_button
-            )
-            return
-
-    buttons = [
-        [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}?startgroup=true")],
-        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
-    ]
-    await update.message.reply_text(
-        f"👋 Welcome, {user.first_name}!\n\nI’m a Bio Mute Bot. I will auto-mute users who have links in their name, bio, or messages.",
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
-
-
-async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     help_text = (
@@ -101,7 +82,9 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/restart - Restart bot (Owner only)\n"
     )
     await query.message.reply_text(help_text, parse_mode="Markdown")
-    async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# ✅ This function was wrongly inside help_callback before. Now moved out.
+async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.chat.type == "private":
         save_id(USERS_FILE, update.message.from_user.id)
         return
@@ -137,7 +120,26 @@ async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if warn_counts[key] >= 4:
             success = await mute_user(update, context, user)
             if success:
-                warn_counts[key] = 0  # Reset warn count after mute
+                warn_counts[key] = 0         [InlineKeyboardButton("🔗 Join Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")]
+            ])
+            await update.message.reply_text(
+                f"👋 Hello {user.first_name},\n\nPlease join our update channel to use this bot.",
+                reply_markup=join_button
+            )
+            return
+
+    buttons = [
+        [InlineKeyboardButton("➕ Add Me To Your Group ➕", url=f"https://t.me/{BOT_USERNAME.lstrip('@')}?startgroup=true")],
+        [InlineKeyboardButton("🔄 Update Channel", url=f"https://t.me/{UPDATE_CHANNEL.lstrip('@')}")],
+        [InlineKeyboardButton("ℹ️ Help", callback_data="help")]
+    ]
+    await update.message.reply_text(
+        f"👋 Welcome, {user.first_name}!\n\nI’m a Bio Mute Bot. I will auto-mute users who have links in their name, bio, or messages.",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+  # Reset warn count after mute
 
 async def mute_user(update, context, user):
     chat_id = update.message.chat.id
