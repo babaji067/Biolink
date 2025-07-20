@@ -109,7 +109,7 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             count = warn_counts[user_id]
 
             if count < 4:
-                warn_msg = f"⚠️ {user.first_name}, links are not allowed! Warning {count}/3"
+                warn_msg = f"⚠️ {user.first_name},links are not allowed in your bio or message! Warning {count}/3"
                 try:
                     await chat.send_message(warn_msg)
                     await context.bot.send_message(user_id, warn_msg)
@@ -166,9 +166,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         with open("start.jpg", "rb") as img:
-            await context.bot.send_photo(chat.id, img, caption="👋 Welcome to BioMuteBot!", reply_markup=keyboard)
+            await context.bot.send_photo(chat.id, img, caption="👋 Hello {user.first_name} *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages", reply_markup=keyboard)
     except:
-        await update.message.reply_text("👋 Welcome to BioMuteBot!", reply_markup=keyboard)
+        await update.message.reply_text("👋 Hello {user.first_name} *Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages.", reply_markup=keyboard)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
