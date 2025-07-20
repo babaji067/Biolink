@@ -166,9 +166,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         with open("start.jpg", "rb") as img:
-            await context.bot.send_photo(chat.id, img, caption="👋 Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages!", reply_markup=keyboard)
+            await context.bot.send_photo(chat.id, img, caption="👋 *Welcome to BioMuteBot!*\n\n"
+        "🚫 I protect your group from users having links in their bios or messages.\n\n", reply_markup=keyboard)
     except:
-        await update.message.reply_text("👋 Welcome to BioMuteBot!*\n\n🚫 I protect your group from users having links in their bios or messages!", reply_markup=keyboard)
+        await update.message.reply_text("👋 *Welcome to BioMuteBot!*\n\n"
+        "🚫 I protect your group from users having links in their bios or messages! \n\n", reply_markup=keyboard)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
